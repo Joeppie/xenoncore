@@ -1,6 +1,6 @@
 {
   "name": "xenoncore",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "The XenonCode language core: project model, analyzer, reference docs, program sites, and the craft decompose/pack codec — for the game Archean (REWRITE § P10: the xenoncore package feeding archean-blueprint-tools, a VS Code extension, and AI tooling).",
   "license": "GPL-3.0-only",
   "type": "module",
@@ -9,10 +9,12 @@
     "url": "git+https://github.com/Joeppie/xenoncore.git"
   },
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./workspace": "./src/workspace.ts"
   },
   "files": [
     "src",
+    "dist",
     "tools/xenoncode/xc_host.cpp",
     "tools/xenoncode/xc_host.h",
     "tools/xenoncode/build.sh",
@@ -26,11 +28,18 @@
   ],
   "scripts": {
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build": "esbuild bin/xenon.mjs bin/mcp.mjs --bundle --platform=node --format=esm --outdir=dist/bin --external:node:* --out-extension:.js=.mjs --sourcemap",
+    "pretest": "npm run build"
   },
   "devDependencies": {
     "@types/node": "^24.19.2",
+    "esbuild": "^0.28.2",
     "typescript": "~6.0.2",
     "vitest": "^5.0.5"
+  },
+  "bin": {
+    "xenon": "dist/bin/xenon.mjs",
+    "xenon-mcp": "dist/bin/mcp.mjs"
   }
 }

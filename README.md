@@ -29,7 +29,20 @@ src/
                  laws), the #NODES preservation law, and matchWorldHdds —
                  the content-hash bridge from a game world-save
                  ARCHEAN_computer/HDD-*/ dir back to a craft's programs
+  workspace.ts   the fs layer (subpath export 'xenoncore/workspace'):
+                 decomposeToDir + packDirToBlueprint — pack is BYTE
+                 SURGERY (locate the xc_files array by byte span, replace
+                 exactly that; every other byte rides unchanged)
   index.ts       the public surface
+bin/             CLIs (esbuild-bundled to dist/bin):
+  xenon.mjs      the COMPILE function on the command line:
+                   xenon decompose <blueprint.json> <dir>
+                   xenon pack      <dir> [<out.json>]
+                   xenon programs  <blueprint.json>
+                   xenon diagnose  <blueprint.json> [alias]
+  mcp.mjs        the MCP server (stdio, `xenon-mcp`): list_programs,
+                 diagnose, analyze_code, vocabulary, decompose, pack —
+                 the AI design-check door (no game, no browser, no app)
 tools/xenoncode/
   xc_host.cpp    OUR device shim (Archean's device/channel law, ABI-stamped)
   build.sh       the build chain: native xc_run + browser wasm glue, built

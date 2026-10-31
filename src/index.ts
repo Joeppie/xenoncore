@@ -11,3 +11,5 @@ export * from './xcanalyze';
 export * from './xcdocs';
 export * from './xcsites';
 export * from './codec';
+// NOTE: the fs/CLI layer is the SUBPATH export 'xenoncore/workspace' —
+// node-only (node:fs); the browser bundle must never pull it in.
