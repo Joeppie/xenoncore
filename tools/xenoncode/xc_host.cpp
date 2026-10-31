@@ -1734,6 +1734,38 @@ EMSCRIPTEN_KEEPALIVE void xc_screen_scroll(int idx, double delta) {
 }
 EMSCRIPTEN_KEEPALIVE int xc_screen_index(const char* key) { return xc_indexOf(key); }
 EMSCRIPTEN_KEEPALIVE void xc_save_storage() { if (g_computer) g_computer->SaveStorage("/prog/storage"); }
+// ABI 19 (STORAGE PERSISTENCE — the ChipOS devkit catch): storage vars are
+// the program's PERSISTENT storage; the game keeps them beside the save,
+// but the browser's wasm runs on an in-memory FS that DIES with the page,
+// so ChipOS re-ran its first-run setup on every load ("all screens say to
+// use the primary one and I cannot get it to work"). The app restores the
+// map into the fresh VM BEFORE xc_boot so LoadStorage finds last session's
+// values — one text file per storage name, exactly the layout SaveStorage
+// writes — and persists the live cache back through xc_storage_dump (an
+// opaque JSON map {name: [lines]} the app never interprets).
+EMSCRIPTEN_KEEPALIVE void xc_seed_storage(const char* name, const char* text) {
+	if (!name || !*name) return;
+	std::filesystem::create_directories("/prog/storage");
+	std::ofstream f(std::string("/prog/storage/") + name, std::ios::out | std::ios::trunc);
+	f << (text ? text : "");
+}
+static std::string g_storeJson;
+EMSCRIPTEN_KEEPALIVE const char* xc_storage_dump() {
+	g_storeJson = "{";
+	bool first = true;
+	if (g_computer)
+		for (const auto& [name, vals] : g_computer->SaveStorage()) {
+			if (!first) g_storeJson += ",";
+			first = false;
+			g_storeJson += "\"" + xc_jsonEscape(name) + "\":[";
+			for (size_t i = 0; i < vals.size(); ++i) {
+				if (i) g_storeJson += ",";
+				g_storeJson += "\"" + xc_jsonEscape(vals[i]) + "\"";
+			}
+			g_storeJson += "]";
+		}
+	return (g_storeJson += "}").c_str();
+}
 EMSCRIPTEN_KEEPALIVE void xc_pilot_script(int on) { g_pilotScripted = on; }
 
 // ---- screen registry (the craft's Screen/HdScreen surfaces) ---------------
@@ -1836,7 +1868,7 @@ EMSCRIPTEN_KEEPALIVE const char* xc_write_var(int fileIdx, int line, const char*
 
 // ABI stamp: the app checks this at boot (XC_ABI in engine/xenoncode.ts) and
 // warns ONCE on drift — new device/shim exports must bump it.
-EMSCRIPTEN_KEEPALIVE int xc_abi() { return 18; }  // 18: button_circle — the round button twin (draws the filled circle, evaluates true on a click inside it) — the game hud "readme" calls it; 17: set_cps RECORDS the HUD cadence (xc_hud_cps) — the HUD pump adapts its interval to the program's init-time call (wiki hud.md); 16: XENON-DEVCHANS — alias-addressed io is PER-DEVICE (a router net hangs many devices on one port; input_text("app-1",0) must not read light1's channel), alias writes mirror onto their port's wire, and every port whose channels received a value fires its input.N handler (RunInput — the ChipOS App Kit's event law); 15: xc_screen_version (XENON-SCREEN-VERSION write counter — the pump blits only changed surfaces); 14: xc_screen_px/xc_screen_py/xc_screen_haspos (the app's composited HUD SCREEN window — panels ride anchor until set_position); 13: $panel.set_size(w,h) + $panel.width/.height (HUD law from the shipped wiki hud.md — XENON-PANEL-RESIZE; RCS Infinity's guide HUD calls it live); 12: xc_hud_mode + ONE screen_w/screen_h declaration serving computer AND HUD (the v1.14.1 duplicate OVERRODE the computer law — DeclareDeviceFunction replaces by name — scaling every computer layout by the 1920x1080 viewport: the Space Invaders main-graphic loss); 11: panel()/beacon() object + beaconpair/beacontx events + get()/xc_set_world + xc_beacon_put + xc_set_input_t + xc_set_view + xc_screen_anchor (HUD runtime + beacon radio); 10: depth stream + hookLive gate + exact-line pause seam (XENON-DEBUG v3); 9: xc_write_var + the hook's cmd-6 write handoff (editable debug values); 8: xc_locals_json + the hook's SAB locals handoff (the Locals panel); 7: the stop-hook is LIVE (library_xc.js + Module.XC_SAB worker stepping); 6: xc_cycle_pairs + hook seam; 5: xc_set_cycle_ms
+EMSCRIPTEN_KEEPALIVE int xc_abi() { return 19; }  // 19: xc_seed_storage + xc_storage_dump (STORAGE PERSISTENCE — the app restores storage vars into the fresh VM before boot and persists them back; the browser's MEMFS dies with the page and the game keeps storage beside the save — the ChipOS devkit setup-amnesia catch); 18: button_circle — the round button twin (draws the filled circle, evaluates true on a click inside it) — the game hud "readme" calls it; 17: set_cps RECORDS the HUD cadence (xc_hud_cps) — the HUD pump adapts its interval to the program's init-time call (wiki hud.md); 16: XENON-DEVCHANS — alias-addressed io is PER-DEVICE (a router net hangs many devices on one port; input_text("app-1",0) must not read light1's channel), alias writes mirror onto their port's wire, and every port whose channels received a value fires its input.N handler (RunInput — the ChipOS App Kit's event law); 15: xc_screen_version (XENON-SCREEN-VERSION write counter — the pump blits only changed surfaces); 14: xc_screen_px/xc_screen_py/xc_screen_haspos (the app's composited HUD SCREEN window — panels ride anchor until set_position); 13: $panel.set_size(w,h) + $panel.width/.height (HUD law from the shipped wiki hud.md — XENON-PANEL-RESIZE; RCS Infinity's guide HUD calls it live); 12: xc_hud_mode + ONE screen_w/screen_h declaration serving computer AND HUD (the v1.14.1 duplicate OVERRODE the computer law — DeclareDeviceFunction replaces by name — scaling every computer layout by the 1920x1080 viewport: the Space Invaders main-graphic loss); 11: panel()/beacon() object + beaconpair/beacontx events + get()/xc_set_world + xc_beacon_put + xc_set_input_t + xc_set_view + xc_screen_anchor (HUD runtime + beacon radio); 10: depth stream + hookLive gate + exact-line pause seam (XENON-DEBUG v3); 9: xc_write_var + the hook's cmd-6 write handoff (editable debug values); 8: xc_locals_json + the hook's SAB locals handoff (the Locals panel); 7: the stop-hook is LIVE (library_xc.js + Module.XC_SAB worker stepping); 6: xc_cycle_pairs + hook seam; 5: xc_set_cycle_ms
 EMSCRIPTEN_KEEPALIVE void xc_set_cycle_ms(int ms) {
 	// the app's pump cadence (CYCLE_MS): delta_time / system_frequency
 	// follow it, so dt-driven programs (Chip's Mario, physics on
