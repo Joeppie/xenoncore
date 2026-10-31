@@ -57,6 +57,11 @@ full write-up lives in the blueprint repo's
 
 ## Development
 
+**Wasm artifacts and git deps:** the `.wasm` rides git LFS — an npm *git*
+dep clone sees the pointer file, so consumers bundle their own asset copy
+(currently `app/src/engine/xenoncode/` in the blueprint app, refreshed by
+the bump ritual below); npm-registry publishes ship the real bytes.
+
 ```bash
 git submodule update --init          # the pinned interpreter fork
 npm install

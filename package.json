@@ -1,6 +1,6 @@
 {
   "name": "xenoncore",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "The XenonCode language core: project model, analyzer, reference docs, program sites, and the craft decompose/pack codec — for the game Archean (REWRITE § P10: the xenoncore package feeding archean-blueprint-tools, a VS Code extension, and AI tooling).",
   "license": "GPL-3.0-only",
   "type": "module",
@@ -18,7 +18,11 @@
     "tools/xenoncode/build.sh",
     "tools/xenoncode/xenoncode.js",
     "tools/xenoncode/xenoncode.wasm",
-    "tools/xenoncode/XENONCODE_UPSTREAM.md"
+    "tools/xenoncode/XENONCODE_UPSTREAM.md",
+    "tools/xenoncode/FirstFlight.main.xc",
+    "tools/xenoncode/functions.xc",
+    "tools/xenoncode/index.html",
+    "tools/xenoncode/demo"
   ],
   "scripts": {
     "test": "vitest run",
