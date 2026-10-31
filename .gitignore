@@ -1,0 +1,4 @@
+node_modules/
+dist/
+tools/xenoncode/run/
+*.tsbuildinfo

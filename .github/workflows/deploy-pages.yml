@@ -1,0 +1,36 @@
+name: pages
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: Joeppie/archean-blueprint-tools
+          path: blueprint-tools
+      - run: |
+          mkdir -p _site/playground _site/testdata
+          cp index.html _site/index.html
+          cp -r tools/xenoncode/index.html tools/xenoncode/xenoncode.js \
+            tools/xenoncode/xenoncode.wasm tools/xenoncode/demo _site/playground/
+          # the playground fetches ../../testdata/<id>/blueprint.json — the
+          # law fixtures (our own generated bench crafts) ride along:
+          for id in 9000009010 9000009040 9000009090; do
+            mkdir -p _site/testdata/$id
+            cp blueprint-tools/testdata/$id/blueprint.json _site/testdata/$id/
+          done
+      - uses: actions/upload-pages-artifact@v3
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: github-pages
+    steps:
+      - uses: actions/deploy-pages@v4
