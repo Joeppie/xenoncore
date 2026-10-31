@@ -10,7 +10,9 @@
   },
   "exports": {
     ".": "./src/index.ts",
-    "./workspace": "./src/workspace.ts"
+    "./workspace": "./src/workspace.ts",
+    "./bin/xenon.mjs": "./dist/bin/xenon.mjs",
+    "./bin/mcp.mjs": "./dist/bin/mcp.mjs"
   },
   "files": [
     "src",
