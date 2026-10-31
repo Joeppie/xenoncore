@@ -1,6 +1,6 @@
 {
   "name": "xenoncore",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "The XenonCode language core: project model, analyzer, reference docs, program sites, and the craft decompose/pack codec — for the game Archean (REWRITE § P10: the xenoncore package feeding archean-blueprint-tools, a VS Code extension, and AI tooling).",
   "license": "GPL-3.0-only",
   "type": "module",
@@ -12,7 +12,8 @@
     ".": "./src/index.ts",
     "./workspace": "./src/workspace.ts",
     "./bin/xenon.mjs": "./dist/bin/xenon.mjs",
-    "./bin/mcp.mjs": "./dist/bin/mcp.mjs"
+    "./bin/mcp.mjs": "./dist/bin/mcp.mjs",
+    "./package.json": "./package.json"
   },
   "files": [
     "src",
