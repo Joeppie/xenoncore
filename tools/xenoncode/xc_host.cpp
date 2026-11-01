@@ -1110,6 +1110,9 @@ int main(int argc, char** argv) {
 
 	auto computer = make_unique<Computer>();      // fresh object per boot, like xc_boot
 	computer->capability.ram = xc_ramCap;
+	// ABI 20 census: the counter counts only while the cap is ENABLED;
+	// u32-max = "the server set no Max IPC" — counted, never clamped.
+	computer->capability.ipc = 0xFFFFFFFFu;
 	computer->capability.storage = xc_storageCap;
 	if (!computer->LoadProgram(dir)) { cerr << "[xc] load failed" << endl; return 3; }
 	Computer::DebugTrack(true);   // native: lines.json snapshot at cycle 5 (debugger triage)
@@ -1135,6 +1138,9 @@ int main(int argc, char** argv) {
 				computer->SaveStorage(dir + "/storage");
 				computer = make_unique<Computer>();
 				computer->capability.ram = xc_ramCap;
+	// ABI 20 census: the counter counts only while the cap is ENABLED;
+	// u32-max = "the server set no Max IPC" — counted, never clamped.
+	computer->capability.ipc = 0xFFFFFFFFu;
 				computer->capability.storage = xc_storageCap;
 				if (!computer->LoadProgram(dir)) { cerr << "[xc] reboot reload failed" << endl; return 3; }
 				if (!getenv("XC_REBOOT_NOSTORE")) computer->LoadStorage(dir + "/storage");
@@ -1287,6 +1293,7 @@ EMSCRIPTEN_KEEPALIVE int xc_boot() {
 		if (!Computer::CompileAssembly("/prog", mainFile.lines, false)) { g_err = "compile failed"; return 1; }
 		g_computer = make_unique<Computer>();
 		g_computer->capability.ram = xc_ramCap;
+		g_computer->capability.ipc = 0xFFFFFFFFu;   // ABI 20 census (unlimited cap)
 		g_computer->capability.storage = xc_storageCap;
 		g_wsProgram.clear(); g_wsEffective.clear();
 		// THE REBOOT LAW (we: "it doesnt clear the virtual screens, that it
