@@ -517,9 +517,25 @@ static void archeanInit() {
 	// device functions (computer.md / archean.md)
 	// screen(aliasOrIoNumber, channelIndex) — the registry surface for that
 	// Screen/HdScreen; auto-creates a default 640x480 for unregistered names
+	// THE IO-NUMBER SCREEN BINDING LAW (v0.3.6, the ChipOS devkit craft
+	// 3828773626): the game's screen() accepts an io NUMBER — ChipOS
+	// slot-binds its displays (@io_port("main-screen") -> screen(8, ch)).
+	// A numeric token resolves through the device table (the SAME law as
+	// the input path) to that device's alias, so the draw lands on the
+	// board's registered surface. Before this, screen(8, ch) keyed the
+	// literal "8#0", auto-created EIGHT 640x480 dev-seed twins, the real
+	// boards stayed black and the twins flashed in the app's Screens dock
+	// ("Chip didnt release a broken version" — our shim was the gap).
 	XenonCode::DeclareDeviceFunction("screen:screen", [](Computer*, const vector<Var>& a) -> Var {
 		string alias = a.size() >= 1 ? xc_lower(string(a[0])) : "main";
 		int ch = a.size() >= 2 ? (int)(int64_t)a[1] : 0;
+		bool numeric = !alias.empty();
+		for (char c : alias) if (!isdigit((unsigned char)c)) { numeric = false; break; }
+		if (numeric) {
+			auto di = g_devByIo.find(atoi(alias.c_str()));
+			if (di != g_devByIo.end() && !g_devs[di->second].alias.empty())
+				alias = xc_lower(g_devs[di->second].alias);
+		}
 		int i = xc_findScreen(alias, ch);
 		if (i < 0) i = xc_addScreen(alias, ch, 640, 480);
 		return Var(screenType, reinterpret_cast<uint64_t>(g_screens[i].scr.get()));
