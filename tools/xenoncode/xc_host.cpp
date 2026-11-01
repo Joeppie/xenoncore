@@ -31,6 +31,17 @@ using XenonCode::Var;
 struct ScreenSlot {
 	std::string key;                        // lowercased alias#channel
 	std::unique_ptr<XenonScreen> scr;
+	// THE STRICT-GAME LAW (v0.3.7 ABI 21, we: "STOP BEING FORGIVING IN
+	// YOUR SHIM and properly emulate the game — a tolerant editor hurts
+	// anyone using it for xenoncode"): the game shows ONLY craft element
+	// boards. A surface the game cannot display — an unbound screen()
+	// token, a computer's virtualscreen()/panel(), the plain target of a
+	// screenless MiniComputer — is a RENDER TARGET: the program draws
+	// into it, clicks route to it (xc_screen_index), but the host never
+	// enumerates it. Forgiving auto-created 640x480 tiles (the old law)
+	// produced phantom "screens" that flashed beside the real boards on
+	// the ChipOS devkit craft (3828773626).
+	bool visible = true;
 	// this cycle's input (wiki computer.md/dashboard.md): a click delivered
 	// by the host (xc_screen_click) is visible to button_rect/button and the
 	// clicked/click_x/click_y values DURING the cycle, then cleared.
@@ -94,12 +105,14 @@ static int xc_findScreen(const std::string& alias, int ch) {
 		if (g_screens[i].key == key) return (int)i;
 	return -1;
 }
-static int xc_addScreen(const std::string& alias, int ch, uint32_t w, uint32_t h) {
+static int xc_addScreen(const std::string& alias, int ch, uint32_t w, uint32_t h,
+                        bool visible = true) {
 	int i = xc_findScreen(alias, ch);
 	if (i >= 0) return i;
 	g_screens.push_back({ xc_lower(alias) + "#" + std::to_string(ch),
 		std::make_unique<XenonScreen>(w, h, XENONCODE_COLOR(0, 0, 0, 255),
-		                              XENONCODE_COLOR(8, 255, 255, 255)) });
+		                              XENONCODE_COLOR(8, 255, 255, 255)),
+		visible });
 	g_slotByPtr[g_screens.back().scr.get()] = g_screens.size() - 1;
 	return (int)g_screens.size() - 1;
 }
@@ -537,7 +550,10 @@ static void archeanInit() {
 				alias = xc_lower(g_devs[di->second].alias);
 		}
 		int i = xc_findScreen(alias, ch);
-		if (i < 0) i = xc_addScreen(alias, ch, 640, 480);
+		// STRICT-GAME LAW: an unbound screen() target is an invisible
+		// render target, never a displayed surface (the game has no
+		// "create a floating screen for unknown tokens" behavior).
+		if (i < 0) i = xc_addScreen(alias, ch, 640, 480, false);
 		return Var(screenType, reinterpret_cast<uint64_t>(g_screens[i].scr.get()));
 	});
 	// ---- the Computer's integrated screen (dashboard.md "First Use": plain
@@ -546,7 +562,11 @@ static void archeanInit() {
 	// read this cycle's click (computer.md "Built-in values").
 	auto ms = []() -> XenonScreen* {
 		int i = xc_findScreen("main", 0);
-		if (i < 0) i = xc_addScreen("main", 0, 640, 480);
+		// A Computer's integrated screen is SEEDED by the host (visible
+		// "main#0", 200x160 wiki law). Reaching the auto-create here means
+		// a screenless machine (MiniComputer) drew plainly: invisible
+		// render target — in-game it has no display at all.
+		if (i < 0) i = xc_addScreen("main", 0, 640, 480, false);
 		return g_screens[i].scr.get();
 	};
 	auto msSlot = []() -> ScreenSlot* {
@@ -639,7 +659,11 @@ static void archeanInit() {
 	XenonCode::DeclareDeviceFunction("virtualscreen:screen", [](Computer*, const vector<Var>& a) -> Var {
 		uint32_t w = (uint32_t)clamp((int64_t)a[0], (int64_t)1, (int64_t)10000);
 		uint32_t h = (uint32_t)clamp((int64_t)a[1], (int64_t)1, (int64_t)10000);
-		int i = xc_addScreen("virtual#" + to_string(g_nextVirtual++), 0, w, h);
+		// STRICT-GAME LAW: a computer's virtualscreen() is an off-screen
+		// render target (computer.md's own words) — the game displays
+		// boards, never the virtual. The HUD runtime composites its
+		// surfaces (the app's SCREEN window), so there they are visible.
+		int i = xc_addScreen("virtual#" + to_string(g_nextVirtual++), 0, w, h, g_hudMode);
 		return Var(screenType, reinterpret_cast<uint64_t>(g_screens[i].scr.get()));
 	});
 	// panel([anchor,] w, h):panel — the HUD's anchored surface
@@ -657,7 +681,9 @@ static void archeanInit() {
 		else if (a.size() == 2) { w = (uint32_t)a[0]; h = (uint32_t)a[1]; }
 		w = (uint32_t)clamp((int64_t)w, (int64_t)1, (int64_t)10000);
 		h = (uint32_t)clamp((int64_t)h, (int64_t)1, (int64_t)10000);
-		int i = xc_addScreen("panel#" + to_string(g_nextPanel++), 0, w, h);
+		// panels are the HUD runtime's surfaces (hud.md) — visible in the
+		// HUD SCREEN window; a computer's panel() is a render target.
+		int i = xc_addScreen("panel#" + to_string(g_nextPanel++), 0, w, h, g_hudMode);
 		g_screens[i].anchor = anchor;
 		return Var(panelType, reinterpret_cast<uint64_t>(g_screens[i].scr.get()));
 	});
@@ -1901,7 +1927,7 @@ EMSCRIPTEN_KEEPALIVE const char* xc_write_var(int fileIdx, int line, const char*
 
 // ABI stamp: the app checks this at boot (XC_ABI in engine/xenoncode.ts) and
 // warns ONCE on drift — new device/shim exports must bump it.
-EMSCRIPTEN_KEEPALIVE int xc_abi() { return 20; }  // 20: xc_cycle_instructions — the work the VM did LAST cycle in the game's own IPC penalty units (the same counter the BIOS shows and the server's Max IPC clamps — wiki Computer.md); 19: xc_seed_storage + xc_storage_dump (STORAGE PERSISTENCE — the app restores storage vars into the fresh VM before boot and persists them back; the browser's MEMFS dies with the page and the game keeps storage beside the save — the ChipOS devkit setup-amnesia catch); 18: button_circle — the round button twin (draws the filled circle, evaluates true on a click inside it) — the game hud "readme" calls it; 17: set_cps RECORDS the HUD cadence (xc_hud_cps) — the HUD pump adapts its interval to the program's init-time call (wiki hud.md); 16: XENON-DEVCHANS — alias-addressed io is PER-DEVICE (a router net hangs many devices on one port; input_text("app-1",0) must not read light1's channel), alias writes mirror onto their port's wire, and every port whose channels received a value fires its input.N handler (RunInput — the ChipOS App Kit's event law); 15: xc_screen_version (XENON-SCREEN-VERSION write counter — the pump blits only changed surfaces); 14: xc_screen_px/xc_screen_py/xc_screen_haspos (the app's composited HUD SCREEN window — panels ride anchor until set_position); 13: $panel.set_size(w,h) + $panel.width/.height (HUD law from the shipped wiki hud.md — XENON-PANEL-RESIZE; RCS Infinity's guide HUD calls it live); 12: xc_hud_mode + ONE screen_w/screen_h declaration serving computer AND HUD (the v1.14.1 duplicate OVERRODE the computer law — DeclareDeviceFunction replaces by name — scaling every computer layout by the 1920x1080 viewport: the Space Invaders main-graphic loss); 11: panel()/beacon() object + beaconpair/beacontx events + get()/xc_set_world + xc_beacon_put + xc_set_input_t + xc_set_view + xc_screen_anchor (HUD runtime + beacon radio); 10: depth stream + hookLive gate + exact-line pause seam (XENON-DEBUG v3); 9: xc_write_var + the hook's cmd-6 write handoff (editable debug values); 8: xc_locals_json + the hook's SAB locals handoff (the Locals panel); 7: the stop-hook is LIVE (library_xc.js + Module.XC_SAB worker stepping); 6: xc_cycle_pairs + hook seam; 5: xc_set_cycle_ms
+EMSCRIPTEN_KEEPALIVE int xc_abi() { return 21; }  // 21: xc_screen_visible (STRICT-GAME LAW — unbound screen() targets, computer virtualscreens()/panels are invisible render targets, the game shows boards only); 20: xc_cycle_instructions — the work the VM did LAST cycle in the game's own IPC penalty units (the same counter the BIOS shows and the server's Max IPC clamps — wiki Computer.md); 19: xc_seed_storage + xc_storage_dump (STORAGE PERSISTENCE — the app restores storage vars into the fresh VM before boot and persists them back; the browser's MEMFS dies with the page and the game keeps storage beside the save — the ChipOS devkit setup-amnesia catch); 18: button_circle — the round button twin (draws the filled circle, evaluates true on a click inside it) — the game hud "readme" calls it; 17: set_cps RECORDS the HUD cadence (xc_hud_cps) — the HUD pump adapts its interval to the program's init-time call (wiki hud.md); 16: XENON-DEVCHANS — alias-addressed io is PER-DEVICE (a router net hangs many devices on one port; input_text("app-1",0) must not read light1's channel), alias writes mirror onto their port's wire, and every port whose channels received a value fires its input.N handler (RunInput — the ChipOS App Kit's event law); 15: xc_screen_version (XENON-SCREEN-VERSION write counter — the pump blits only changed surfaces); 14: xc_screen_px/xc_screen_py/xc_screen_haspos (the app's composited HUD SCREEN window — panels ride anchor until set_position); 13: $panel.set_size(w,h) + $panel.width/.height (HUD law from the shipped wiki hud.md — XENON-PANEL-RESIZE; RCS Infinity's guide HUD calls it live); 12: xc_hud_mode + ONE screen_w/screen_h declaration serving computer AND HUD (the v1.14.1 duplicate OVERRODE the computer law — DeclareDeviceFunction replaces by name — scaling every computer layout by the 1920x1080 viewport: the Space Invaders main-graphic loss); 11: panel()/beacon() object + beaconpair/beacontx events + get()/xc_set_world + xc_beacon_put + xc_set_input_t + xc_set_view + xc_screen_anchor (HUD runtime + beacon radio); 10: depth stream + hookLive gate + exact-line pause seam (XENON-DEBUG v3); 9: xc_write_var + the hook's cmd-6 write handoff (editable debug values); 8: xc_locals_json + the hook's SAB locals handoff (the Locals panel); 7: the stop-hook is LIVE (library_xc.js + Module.XC_SAB worker stepping); 6: xc_cycle_pairs + hook seam; 5: xc_set_cycle_ms
 EMSCRIPTEN_KEEPALIVE void xc_set_cycle_ms(int ms) {
 	// the app's pump cadence (CYCLE_MS): delta_time / system_frequency
 	// follow it, so dt-driven programs (Chip's Mario, physics on
@@ -1909,6 +1935,11 @@ EMSCRIPTEN_KEEPALIVE void xc_set_cycle_ms(int ms) {
 	if (ms > 0) xc_dt = ms / 1000.0;
 }
 EMSCRIPTEN_KEEPALIVE int xc_screen_count() { return (int)g_screens.size(); }
+// ABI 21: the host enumerates ONLY visible surfaces (see ScreenSlot.visible
+// — the STRICT-GAME LAW); hidden render targets stay invisible to the app.
+EMSCRIPTEN_KEEPALIVE int xc_screen_visible(int i) {
+	return (i >= 0 && i < (int)g_screens.size() && g_screens[i].visible) ? 1 : 0;
+}
 // ABI 16: stamp VIRTUAL time (ms per cycle) for deterministic headless
 // cycles (the vmharness law); 0 restores the real-dt pump.
 EMSCRIPTEN_KEEPALIVE void xc_set_virtual_dt(int ms) { xc_vdtMs = ms; }
